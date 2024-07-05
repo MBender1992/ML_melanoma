@@ -484,8 +484,7 @@ ggplot(data = feat.freq.relaxed.miRNA, aes(coef, freq)) +
 #####################################
 
 model.matrix.signifMirna <- model.matrix(Responder~., select(dat_log, c(matches("mir.132.3|mir.137|mir.197.3p|mir.214.3p|mir.514a.3p"),Responder)))[,-1]
-models.lasso.signifMirna <- ml_eval(model.matrix.signifMirna, dat_log, rep = 10, k = 10)
-
+models.lasso.signifMirna <- ml_eval(model.matrix.signifMirna, y = dat_log$Responder)
 
 
 # saveRDS(models.lasso.signifMirna, "models/models.lasso.signifMirna.rds")
@@ -495,14 +494,25 @@ models.lasso.signifMirna <- ml_eval(model.matrix.signifMirna, dat_log, rep = 10,
 models.lasso.signifMirna <- setNames(lapply(models.lasso.signifMirna, setNames, folds), reps)
 
 ## confidence interval for the cv.train folds in the inner loop 
-ci.relaxedLasso <- rbind.model.ci(models.lasso.relaxedLasso)
+ci.signifMirna <- mlekb::rbind_model_ci(models.lasso.signifMirna, rep.outer = 10)
 
-# extract important coefficients
-extract.coefs.relaxedLasso <- extractCoefs(models.lasso.relaxedLasso) %>% do.call(rbind,.) %>% table() 
+#####################################
+##
+## c.6 Only significant baseline factors (serum levels + demographics)
+##
+#####################################
 
-# calculate percentages
-feat.freq <- data.frame(sort(extract.coefs.relaxedLasso/100)) %>% 
-  setNames(c("coef", "freq"))
+model.matrix.signifNoMiRNA <- model.matrix(Responder~., select(dat_log, c(LDH, S100, CRP, Eosinophile, Alter, prior_BRAF_therapy,Responder)))[,-1]
+model.matrix.signifNoMiRNA <- ml_eval(model.matrix.signifNoMiRNA, y = dat_log$Responder)
+
+# saveRDS(model.matrix.signifNoMiRNA, "models/model.matrix.signifNoMiRNA.rds")
+# model.matrix.signifNoMiRNA <- readRDS("models/model.matrix.signifNoMiRNA.rds")
+
+# set names of list elements
+model.matrix.signifNoMiRNA <- setNames(lapply(model.matrix.signifNoMiRNA, setNames, folds), reps)
+
+## confidence interval for the cv.train folds in the inner loop 
+ci.signifNoMirna <- mlekb::rbind_model_ci(model.matrix.signifNoMiRNA, rep.outer = 10)
 
 #####################################
 ##
@@ -515,18 +525,21 @@ dat_compare <- rbind(complete = ci.complete,
       relaxedLasso = ci.relaxedLasso,
       baseline = ci.baseline,
       signif = ci.signif,
+      signifMiRNA = ci.signifMirna,
+      signifNoMiRNA = ci.signifNoMirna, 
       miRNA = ci.miRNA,
       relaxedmiRNA = ci.relaxed.miRNA) %>% 
   rownames_to_column("tmp") %>%
   separate(tmp,c("model", "results"), extra = "merge") %>%
+  filter(str_detect(results, "inner")) %>%
   mutate(model = factor(model),
          model = reorder(model, cvAUC))
 
 # train inner cv ROC
 svg("Results/comparison_inner_cvAUC.svg",  width=9, height=6)
-ggplot(filter(dat_compare, results == "train.inner"), aes(x=model, y=cvAUC)) + 
+ggplot(dat_compare, aes(x=model, y=cvAUC)) + 
   geom_errorbar(aes(ymin=lower, ymax=upper), width = 0.3, size = 1) +
-  geom_point(size = 4, shape = 18, color = "red") +
+  geom_point(size = 4, shape = 19, color = "skyblue") +
   coord_flip() + 
   theme_bw() + 
   theme(text = element_text(size = 16)) +
@@ -556,8 +569,6 @@ dat_compare[dat_compare$results == "train.inner",]
 ## e. ROC curve
 ##
 #####################################
-
-
 
 # calcuate AUC for different folds
 ls <- ls_cvAUC(models.lasso.relaxedLasso)

@@ -23,6 +23,9 @@ source_url("https://raw.githubusercontent.com/MBender1992/base_scripts/Marc/R_fu
 # load data with custom function for melanoma data only for Responders
 dat <- load_melanoma_data()
 
+dat %>% filter(!is.na(Responder)) %>%
+  select(miRExpAssess, prior_BRAF_therapy, Stadium) %>% print(n="all")
+
 dat_fct <- dat %>%
   filter(miRExpAssess == 1 & !is.na(Responder)) %>%
   select(-c(TRIM_PDL1_Expression , miRExpAssess, therapy_at_blood_draw)) %>%
